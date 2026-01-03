@@ -1,7 +1,7 @@
 # Archit Search
 
 <p align="center">
-  <img src="resources/archit-search.png" alt="Archit Search Logo" width="180">
+  <img src="./resources/archit-search.png" alt="Archit Search Logo" width="180">
 </p>
 
 <h3 align="center">🏛️ Intelligent Architecture Enforcement with AI-Powered Analysis</h3>
