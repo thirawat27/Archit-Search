@@ -25,7 +25,7 @@
  */
 
 const vscode = require('vscode');
-const path = require('path');
+
 
 // Core validation modules
 const RuleEngine = require('./lib/RuleEngine');
@@ -44,6 +44,7 @@ const MetricsCalculator = require('./lib/MetricsCalculator');
 const QuickFixProvider = require('./lib/QuickFixProvider');
 const ReportExporter = require('./lib/ReportExporter');
 const UnusedImportDetector = require('./lib/UnusedImportDetector');
+const ValidationService = require('./lib/ValidationService');
 
 /**
  * Extension configuration defaults
@@ -87,6 +88,13 @@ function activate(context) {
     const quickFixProvider = new QuickFixProvider();
     const reportExporter = new ReportExporter(metricsCalculator, deepCycleDetector);
     const unusedImportDetector = new UnusedImportDetector();
+
+    // Initialize validation service
+    const validationService = new ValidationService({
+        engine, parser, visualizer, graph, advisor, 
+        statusBar, aiKernel, sidebarProvider, 
+        deepCycleDetector, unusedImportDetector
+    });
 
     // Register sidebar tree view
     const treeView = vscode.window.createTreeView('architSearchSidebar', {
@@ -190,41 +198,21 @@ function activate(context) {
 
     // Validation state
     let activeEditor = vscode.window.activeTextEditor;
-    let validationTimeout = undefined;
-
-    /**
-     * Triggers validation with optional throttle.
-     * @param {number} throttleMs - Throttle delay in milliseconds
-     */
-    function triggerValidation(throttleMs = DEFAULTS.VALIDATION_THROTTLE_MS) {
-        if (validationTimeout) {
-            clearTimeout(validationTimeout);
-            validationTimeout = undefined;
-        }
-        validationTimeout = setTimeout(() => validateCurrentFile(), throttleMs);
-    }
-
-    // Initial validation if editor is active
-    if (activeEditor) {
-        triggerValidation();
-    }
 
     // Register event listeners
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor(editor => {
             activeEditor = editor;
             if (editor) {
-                triggerValidation();
+                validationService.triggerValidation(editor);
             } else {
-                // Clear status when no editor is active
-                statusBar.update([]);
-                sidebarProvider.reset();
+                validationService.triggerValidation(null);
             }
         }),
 
         vscode.workspace.onDidChangeTextDocument(event => {
             if (activeEditor && event.document === activeEditor.document) {
-                triggerValidation();
+                validationService.triggerValidation(activeEditor);
             }
         }),
 
@@ -232,190 +220,16 @@ function activate(context) {
             if (event.affectsConfiguration('architSearch')) {
                 const newConfig = vscode.workspace.getConfiguration('architSearch');
                 Localization.setLanguage(newConfig.get('language') || 'en');
-                triggerValidation();
+                if (activeEditor) {
+                    validationService.triggerValidation(activeEditor);
+                }
             }
         })
     );
-
-    /**
-     * Validates the current file for architecture violations.
-     */
-    function validateCurrentFile() {
-        if (!activeEditor) {
-            return;
-        }
-
-        const doc = activeEditor.document;
-        const text = doc.getText();
-        const config = vscode.workspace.getConfiguration('architSearch');
-
-        // Get configuration values
-        const rules = config.get('rules') || [];
-        const layers = config.get('layers') || [];
-        const maxImports = config.get('maxImports') || DEFAULTS.MAX_IMPORTS;
-        const checkEncapsulation = config.get('enforceEncapsulation') !== false;
-        const checkCycles = config.get('checkCycles') !== false;
-        const enableAI = config.get('enableAI') !== false;
-
-        // Resolve file paths
-        const workspaceFolder = vscode.workspace.getWorkspaceFolder(doc.uri);
-        const currentFilePathRelative = workspaceFolder
-            ? vscode.workspace.asRelativePath(doc.uri, false)
-            : path.basename(doc.fileName);
-
-        // Parse imports
-        const imports = parser.parse(text, doc.languageId);
-
-        const violations = [];
-        let anomalyScore = '0.0';
-
-        // 1. Check God Object (High Coupling)
-        if (imports.length > maxImports) {
-            violations.push(createViolation(
-                new vscode.Range(0, 0, 0, 0),
-                Localization.get('godObject', imports.length, maxImports),
-                vscode.DiagnosticSeverity.Warning
-            ));
-        }
-
-        // 2. AI Anomaly Detection
-        if (enableAI) {
-            const anomaly = aiKernel.detectAnomaly(text);
-            if (anomaly) {
-                anomalyScore = anomaly.score;
-                if (anomaly.isAnomaly) {
-                    violations.push(createViolation(
-                        new vscode.Range(0, 0, 0, 0),
-                        Localization.get('anomaly', anomaly.score, Math.round(aiKernel.statsModel?.mean || 0)),
-                        vscode.DiagnosticSeverity.Warning
-                    ));
-                }
-            }
-        }
-
-        // 3. Unused Import Detection
-        const detectUnused = config.get('detectUnusedImports') === true;
-        if (detectUnused) {
-            const unusedImports = unusedImportDetector.detect(text, doc.languageId);
-            for (const unused of unusedImports) {
-                const startPos = doc.positionAt(unused.index);
-                const endPos = doc.positionAt(unused.index + unused.length);
-                violations.push(createViolation(
-                    new vscode.Range(startPos, endPos),
-                    `Unused import '${unused.name}' - Consider removing it`,
-                    vscode.DiagnosticSeverity.Hint
-                ));
-            }
-        }
-
-        // 4. Deep Cycle Detection (multi-level cycles like A → B → C → A)
-        const checkDeepCycles = config.get('checkDeepCycles') !== false;
-        if (checkDeepCycles && deepCycleDetector) {
-            const deepCycleResult = deepCycleDetector.detectDeepCycle(doc.uri.fsPath);
-            if (deepCycleResult?.hasCycle) {
-                violations.push(createViolation(
-                    new vscode.Range(0, 0, 0, 0),
-                    `🔄 ${deepCycleResult.message}`,
-                    vscode.DiagnosticSeverity.Warning
-                ));
-            }
-        }
-
-        // 5. Check each import for individual violations
-        for (const imp of imports) {
-            const importViolations = checkImport(
-                imp, doc, currentFilePathRelative,
-                { rules, layers, checkEncapsulation, checkCycles, enableAI },
-                { engine, graph, advisor }
-            );
-            violations.push(...importViolations);
-        }
-
-        // Apply visualizations and update UI
-        visualizer.report(activeEditor, violations);
-        statusBar.update(violations);
-
-        // Update sidebar
-        updateSidebar(sidebarProvider, doc, violations, imports.length, anomalyScore);
-    }
-
-    /**
-     * Checks a single import for violations.
-     */
-    function checkImport(imp, doc, currentFilePathRelative, options, components) {
-        const { rules, layers, checkEncapsulation, checkCycles, enableAI } = options;
-        const { engine, graph, advisor } = components;
-        const violations = [];
-
-        let resolvedRelativePath = imp.path;
-        let resolvedAbsolutePath = null;
-
-        // Resolve relative imports
-        if (imp.path.startsWith('.')) {
-            const currentDir = path.dirname(doc.uri.fsPath);
-            resolvedAbsolutePath = path.resolve(currentDir, imp.path);
-            resolvedRelativePath = vscode.workspace.asRelativePath(resolvedAbsolutePath, false);
-        }
-
-        // Check architecture rules
-        const archResult = engine.validate(
-            currentFilePathRelative,
-            resolvedRelativePath,
-            rules,
-            layers
-        );
-
-        if (archResult?.isViolation) {
-            violations.push(createViolation(
-                createRangeFromImport(doc, imp),
-                archResult.message,
-                vscode.DiagnosticSeverity.Error
-            ));
-            return violations; // Stop further checks if strict violation
-        }
-
-        // Continue with heuristic checks only for local imports
-        if (!resolvedAbsolutePath) {
-            return violations;
-        }
-
-        // Check encapsulation
-        if (checkEncapsulation) {
-            const encResult = engine.checkEncapsulation(resolvedAbsolutePath);
-            if (encResult?.isViolation) {
-                violations.push(createViolation(
-                    createRangeFromImport(doc, imp),
-                    encResult.message,
-                    vscode.DiagnosticSeverity.Warning
-                ));
-            }
-        }
-
-        // Check circular dependencies
-        if (checkCycles) {
-            const cycleResult = graph.checkCycle(doc.uri.fsPath, resolvedAbsolutePath);
-            if (cycleResult?.isCycle) {
-                violations.push(createViolation(
-                    createRangeFromImport(doc, imp),
-                    cycleResult.message,
-                    vscode.DiagnosticSeverity.Warning
-                ));
-            }
-        }
-
-        // AI semantic analysis
-        if (enableAI) {
-            const aiResult = advisor.analyze(doc.uri.fsPath, resolvedAbsolutePath);
-            if (aiResult?.isSuspicious) {
-                violations.push(createViolation(
-                    createRangeFromImport(doc, imp),
-                    aiResult.message,
-                    vscode.DiagnosticSeverity.Warning
-                ));
-            }
-        }
-
-        return violations;
+        
+    // Initial validation
+    if (activeEditor) {
+        validationService.triggerValidation(activeEditor);
     }
 }
 
@@ -459,60 +273,6 @@ async function scheduleAILearning(aiKernel, sidebarProvider, deepCycleDetector, 
             console.error('AI Learning failed:', err);
         }
     }, DEFAULTS.AI_LEARNING_DELAY_MS);
-}
-
-/**
- * Creates a violation object.
- * 
- * @param {vscode.Range} range - Violation range
- * @param {string} message - Violation message
- * @param {vscode.DiagnosticSeverity} severity - Violation severity
- * @returns {{range: vscode.Range, message: string, severity: vscode.DiagnosticSeverity}}
- */
-function createViolation(range, message, severity) {
-    return { range, message, severity };
-}
-
-/**
- * Creates a range from an import position.
- * 
- * @param {vscode.TextDocument} doc - Document
- * @param {{index: number, length: number}} imp - Import info
- * @returns {vscode.Range}
- */
-function createRangeFromImport(doc, imp) {
-    const startPos = doc.positionAt(imp.index);
-    const endPos = doc.positionAt(imp.index + imp.length);
-    return new vscode.Range(startPos, endPos);
-}
-
-/**
- * Updates the sidebar with current file status.
- * 
- * @param {ArchitSidebarProvider} sidebarProvider - Sidebar provider
- * @param {vscode.TextDocument} doc - Current document
- * @param {Array} violations - Array of violations
- * @param {number} importCount - Number of imports
- * @param {string} anomalyScore - AI anomaly score
- */
-function updateSidebar(sidebarProvider, doc, violations, importCount, anomalyScore) {
-    const hasErrors = violations.some(v => v.severity === vscode.DiagnosticSeverity.Error);
-    const hasWarnings = violations.some(v => v.severity === vscode.DiagnosticSeverity.Warning);
-
-    let status = 'Healthy';
-    if (hasErrors) {
-        status = 'Error';
-    } else if (hasWarnings) {
-        status = 'Warning';
-    }
-
-    sidebarProvider.refresh({
-        filename: path.basename(doc.uri.fsPath),
-        status: status,
-        violations: violations.length,
-        imports: importCount,
-        anomalyScore: anomalyScore
-    });
 }
 
 /**
