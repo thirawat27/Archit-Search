@@ -9,7 +9,7 @@
     "url": "https://github.com/Thirawat27"
   },
   "license": "GPL-3.0-only",
-  "icon": "resources/archit-search.png",
+  "icon": "./resources/archit-search.png",
   "galleryBanner": {
     "color": "#1e1e2e",
     "theme": "dark"
