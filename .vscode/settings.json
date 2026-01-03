@@ -1,0 +1,30 @@
+{
+    "architSearch.rules": [
+        {
+            "source": "**src/pages**",
+            "disallow": [
+                "**src/database**"
+            ],
+            "message": "UI Layer cannot access Database Layer directly!"
+        }
+    ],
+    "architSearch.layers": [
+        {
+            "name": "Core",
+            "pattern": "**/core/**"
+        },
+        {
+            "name": "Infra",
+            "pattern": "**/database/**"
+        },
+        {
+            "name": "Presentation",
+            "pattern": "**/pages/**"
+        }
+    ],
+    "architSearch.maxImports": 10,
+    "architSearch.checkCycles": true,
+    "architSearch.enforceEncapsulation": true,
+    "architSearch.enableAI": true,
+    "architSearch.language": "en"
+}

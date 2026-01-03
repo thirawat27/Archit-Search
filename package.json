@@ -1,0 +1,296 @@
+{
+  "name": "archit-search",
+  "displayName": "Archit Search",
+  "description": "Intelligent architecture enforcement extension that combines real-time rule-based validation with AI-powered anomaly detection to prevent spaghetti code and maintain clean, scalable codebases.",
+  "version": "0.0.1",
+  "publisher": "Thirawat27",
+  "author": {
+    "name": "Thirawat27",
+    "url": "https://github.com/Thirawat27"
+  },
+  "license": "GPL-3.0-only",
+  "icon": "resources/archit-search.png",
+  "galleryBanner": {
+    "color": "#1e1e2e",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Thirawat27/archit-search"
+  },
+  "bugs": {
+    "url": "https://github.com/Thirawat27/archit-search/issues"
+  },
+  "homepage": "https://github.com/Thirawat27/archit-search#readme",
+  "engines": {
+    "vscode": "^1.107.0"
+  },
+  "keywords": [
+    "architecture",
+    "linter",
+    "code-quality",
+    "dependency-analysis",
+    "circular-dependency",
+    "clean-architecture",
+    "ai",
+    "anomaly-detection",
+    "import-validation",
+    "software-architecture",
+    "code-review",
+    "static-analysis",
+    "layered-architecture"
+  ],
+  "categories": [
+    "Linters",
+    "Visualization",
+    "Programming Languages",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "archit-search-container",
+          "title": "Archit Search",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "archit-search-container": [
+        {
+          "id": "architSearchSidebar",
+          "name": "Architecture Health",
+          "contextualTitle": "Archit Search - Architecture Health Monitor"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Archit Search",
+      "properties": {
+        "architSearch.rules": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "Define custom architecture rules for import restrictions. Each rule specifies source file patterns and disallowed import patterns.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "description": "Glob pattern for the source files (e.g., '**/pages/**')."
+              },
+              "disallow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "List of patterns disallowed to be imported (e.g., ['**/database/**', '**/models/**'])."
+              },
+              "message": {
+                "type": "string",
+                "description": "Custom warning message displayed when the rule is violated."
+              }
+            },
+            "required": [
+              "source",
+              "disallow"
+            ]
+          }
+        },
+        "architSearch.layers": {
+          "type": "array",
+          "default": [],
+          "markdownDescription": "Define ordered architecture layers. Lower layers in the list cannot import from upper layers, enforcing unidirectional dependencies.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Layer name for identification (e.g. Domain, Infrastructure, Presentation)"
+              },
+              "pattern": {
+                "type": "string",
+                "description": "Glob pattern matching files in this layer (e.g. '**/domain/**')"
+              }
+            },
+            "required": [
+              "name",
+              "pattern"
+            ]
+          }
+        },
+        "architSearch.maxImports": {
+          "type": "integer",
+          "default": 15,
+          "minimum": 1,
+          "maximum": 100,
+          "markdownDescription": "Maximum number of imports allowed per file. Files exceeding this threshold trigger a 'High Coupling' warning, indicating potential God Object anti-pattern."
+        },
+        "architSearch.enforceEncapsulation": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "When enabled, warns when importing internal module files directly instead of using the module entry point (index.js or index.ts). Promotes proper module encapsulation."
+        },
+        "architSearch.checkCycles": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "When enabled, detects and warns about direct circular dependencies (A imports B, B imports A). Essential for preventing tightly coupled code."
+        },
+        "architSearch.enableAI": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Enable AI Semantic Analysis engine to detect suspicious dependencies based on conceptual mismatch and statistical anomalies."
+        },
+        "architSearch.language": {
+          "type": "string",
+          "default": "en",
+          "enum": [
+            "en",
+            "th"
+          ],
+          "enumDescriptions": [
+            "English - Default language",
+            "ภาษาไทย - Thai language support"
+          ],
+          "markdownDescription": "Select the language for all extension messages, status bar, and sidebar UI elements. Changes take effect immediately without reload."
+        },
+        "architSearch.checkDeepCycles": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Enable deep circular dependency detection. Finds multi-level cycles like A → B → C → A, not just direct A ↔ B cycles."
+        },
+        "architSearch.deepCycleMaxDepth": {
+          "type": "integer",
+          "default": 10,
+          "minimum": 2,
+          "maximum": 20,
+          "markdownDescription": "Maximum depth to search for circular dependencies. Higher values detect deeper cycles but may impact performance."
+        },
+        "architSearch.detectUnusedImports": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "When enabled, detects and warns about imports that are declared but not used in the file."
+        },
+        "architSearch.showMetricsInSidebar": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Display file metrics (Maintainability Index, Instability, Coupling) in the sidebar panel."
+        },
+        "architSearch.autoExportReport": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Automatically export architecture report when the project is analyzed. Reports are saved to the workspace root."
+        },
+        "architSearch.reportFormat": {
+          "type": "string",
+          "default": "html",
+          "enum": [
+            "json",
+            "html",
+            "markdown"
+          ],
+          "enumDescriptions": [
+            "JSON - Machine-readable format for CI/CD integration",
+            "HTML - Visual report with styled dashboard",
+            "Markdown - Documentation-friendly format"
+          ],
+          "markdownDescription": "Default format for exported architecture reports."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "archit-search.exportReport",
+        "title": "Export Architecture Report",
+        "category": "Archit Search",
+        "icon": "$(export)"
+      },
+      {
+        "command": "archit-search.showMetrics",
+        "title": "Show File Metrics",
+        "category": "Archit Search",
+        "icon": "$(graph)"
+      },
+      {
+        "command": "archit-search.detectDeepCycles",
+        "title": "Detect Deep Circular Dependencies",
+        "category": "Archit Search",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "archit-search.showRefactorGuide",
+        "title": "Show Refactoring Guide",
+        "category": "Archit Search"
+      },
+      {
+        "command": "archit-search.explainViolation",
+        "title": "Explain This Violation",
+        "category": "Archit Search"
+      },
+      {
+        "command": "archit-search.analyzeProject",
+        "title": "Analyze Entire Project",
+        "category": "Archit Search",
+        "icon": "$(search)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "archit-search.exportReport",
+          "when": "view == architSearchSidebar",
+          "group": "navigation"
+        },
+        {
+          "command": "archit-search.analyzeProject",
+          "when": "view == architSearchSidebar",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "archit-search.showMetrics",
+          "group": "archit-search@1",
+          "when": "editorTextFocus"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "archit-search.exportReport"
+        },
+        {
+          "command": "archit-search.showMetrics"
+        },
+        {
+          "command": "archit-search.detectDeepCycles"
+        },
+        {
+          "command": "archit-search.analyzeProject"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "pretest": "npm run lint",
+    "test": "vscode-test",
+    "package": "vsce package",
+    "publish": "vsce publish"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/vscode": "^1.107.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "eslint": "^9.16.0"
+  },
+  "dependencies": {
+    "minimatch": "^10.1.1"
+  }
+}
