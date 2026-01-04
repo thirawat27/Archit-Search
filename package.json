@@ -2,7 +2,7 @@
   "name": "archit-search",
   "displayName": "Archit Search",
   "description": "Intelligent architecture enforcement extension that combines real-time rule-based validation with AI-powered anomaly detection to prevent spaghetti code and maintain clean, scalable codebases.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "Thirawat27",
   "author": {
     "name": "Thirawat27",
@@ -284,11 +284,11 @@
   },
   "devDependencies": {
     "@types/mocha": "^10.0.10",
-    "@types/node": "20.x",
+    "@types/node": "25.x",
     "@types/vscode": "^1.107.0",
-    "@vscode/test-cli": "^0.0.10",
-    "@vscode/test-electron": "^2.4.1",
-    "eslint": "^9.16.0"
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
+    "eslint": "^9.39.2"
   },
   "dependencies": {
     "minimatch": "^10.1.1"
